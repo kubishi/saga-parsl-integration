@@ -1,0 +1,7 @@
+[submodule "parsl"]
+	path = parsl
+	url = https://github.com/kubishi/parsl.git
+	branch = feature/saga-parsl-integration
+[submodule "saga"]
+	path = saga
+	url = https://github.com/ANRGUSC/saga.git
