@@ -10,7 +10,8 @@ scheduling/                    # Main project repository
 ├── saga/                     # Git submodule: SAGA scheduling library
 ├── scripts/                  # Test scripts and examples
 │   ├── test_local.py        # Local test without K8s
-│   └── test.py              # Full K8s integration test
+│   ├── test.py              # K8s integration test
+│   └── test_multinode.py    # Multi-node K8s distribution test
 ├── pyproject.toml           # Main project configuration
 └── README.md                # This file
 ```
@@ -36,7 +37,8 @@ This project integrates SAGA (Scheduling Algorithms Gathered) with Parsl's High 
 
 - Python 3.12+
 - UV package manager
-- Kubernetes cluster (for full integration tests)
+- Docker (for building worker images)
+- kind or other Kubernetes cluster (for full integration tests)
 
 ### Installation
 
@@ -81,36 +83,60 @@ Expected output:
 - All 4 tasks assigned to nodes
 - Tasks execute correctly
 
-### Full Integration Test (Requires K8s)
+### Kubernetes Integration Tests
 
-Tests complete SAGA + Parsl + K8s integration with interchange routing:
+#### Basic K8s Test
+
+Tests SAGA scheduler with K8s worker pods:
 
 ```bash
 uv run python scripts/test.py
 ```
 
-Requires:
-- Running Kubernetes cluster
-- `default` namespace accessible
-- Docker image `nick23447/parsl-worker:latest`
+#### Multi-Node Distribution Test
 
-Expected log messages:
+Tests SAGA distributing tasks across multiple K8s nodes with varying task costs:
+
+```bash
+uv run python scripts/test_multinode.py
+```
+
+**K8s Setup:**
+
+1. Create a multi-node kind cluster:
+```bash
+kind create cluster --config kind-config.yaml --name saga-test
+```
+
+2. Build the worker Docker image:
+```bash
+docker build --platform linux/amd64 -t parsl-saga-worker:latest -f Dockerfile.worker .
+kind load docker-image parsl-saga-worker:latest --name saga-test
+```
+
+Expected output:
 - `"SAGA: Task X assigned to node Y"`
-- `"SAGA: Sent task X to manager Z on node Y"`
+- Tasks distributed across multiple worker nodes
+- Summary showing which pods executed each task
 
 ## Implementation Details
 
 ### Modified Files
 
 **Parsl (`parsl/`):**
-- `dataflow/dflow.py`: SAGA scheduler integration, task graph building, assignment storage
-- `executors/high_throughput/interchange.py`: Two-phase routing with SAGA affinity
-- `executors/high_throughput/process_worker_pool.py`: K8s node name reporting
-- `executors/high_throughput/manager_record.py`: Added `k8s_node_name` field
+- `dataflow/dflow.py`: SAGA scheduler integration, task graph building, assignment storage, closure bug fix
+- `executors/high_throughput/executor.py`: Updated launch commands to use `-m` module syntax, added `_saga_node_affinity` to resource spec, added `encrypted` parameter support
+- `executors/high_throughput/interchange.py`: SAGA affinity-based task routing to specific worker nodes
+- `providers/kubernetes/kube.py`: Network graph query from K8s cluster nodes (not pods), added `image_pull_policy` parameter
 - `config.py`: Added `saga_scheduler` configuration parameter
 
 **SAGA (`saga/`):**
 - No modifications needed - used as-is
+
+**Infrastructure:**
+- `Dockerfile.worker`: Multi-arch worker image with Parsl + SAGA dependencies
+- `kind-config.yaml`: 3-worker Kubernetes cluster configuration
+- `.vscode/settings.json`: Python path configuration for IDE
 
 ### Key Design Decisions
 
@@ -161,16 +187,26 @@ uv run python scripts/my_test.py
 ## Current Status
 
 ✅ Implementation complete
-✅ Local testing successful
-✅ SAGA scheduler integration working
-⏳ Full K8s integration testing pending
+✅ Local testing successful (ThreadPoolExecutor)
+✅ K8s integration working (HighThroughputExecutor)
+✅ Multi-node task distribution verified
+✅ SAGA HEFT scheduler generating optimal assignments
+✅ Task affinity routing to specific worker nodes
+
+## Key Achievements
+
+- **Closure Bug Fix**: Fixed critical callback capture issue in `dflow.py` that caused task execution to hang
+- **Network Graph Discovery**: K8s provider correctly queries cluster nodes for SAGA network topology
+- **Module Launch Commands**: Updated HTEx to use `-m` syntax for editable installs
+- **Multi-node Validation**: Demonstrated tasks distributed across 3 worker pods with varying costs
+- **Docker Multi-arch Support**: Worker image builds for x86_64 with all dependencies
 
 ## Next Steps
 
-1. Set up K8s cluster for end-to-end testing
-2. Add K8s Downward API to expose node names
-3. Test interchange routing with multiple nodes
-4. Benchmark performance vs default scheduling
+1. Add task cost estimation or user-specified weights for better SAGA scheduling
+2. Benchmark performance vs default Parsl scheduling
+3. Test with larger DAGs and more complex topologies
+4. Explore other SAGA schedulers (CPOP, etc.)
 
 ## References
 

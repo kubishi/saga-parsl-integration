@@ -12,8 +12,8 @@ dependencies = [
     "anrg-saga",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "mypy>=0.991",
 ]
@@ -22,6 +22,3 @@ dev-dependencies = [
 # Local editable installations of submodules
 parsl = { path = "./parsl", editable = true }
 anrg-saga = { path = "./saga", editable = true }
-
-[tool.uv.workspace]
-members = ["parsl", "saga"]

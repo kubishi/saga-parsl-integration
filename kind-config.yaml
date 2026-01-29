@@ -1,0 +1,17 @@
+# kind cluster configuration for multi-node testing
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  # Control plane node
+  - role: control-plane
+
+  # Worker nodes - SAGA will distribute tasks across these
+  - role: worker
+    labels:
+      node-type: worker
+  - role: worker
+    labels:
+      node-type: worker
+  - role: worker
+    labels:
+      node-type: worker
