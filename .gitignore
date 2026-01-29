@@ -42,8 +42,3 @@ env/
 # Parsl runtime
 runinfo/
 *.log
-
-# Submodules (managed separately)
-# Note: These will be added as git submodules
-parsl/
-saga/
