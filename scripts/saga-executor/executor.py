@@ -1,10 +1,10 @@
-from typing import Optional, Callable, Any, Dict, List
+from typing import Optional, Callable, List
 from functools import wraps
 import concurrent.futures
 import networkx as nx
-#from saga.src.saga import Scheduler
+from saga import Scheduler, Network, TaskGraph
 import matplotlib.pyplot as plt
-
+import multiprocessing as mp
 
 """
 Notes:
@@ -30,10 +30,6 @@ class AppFuture:
         If not, this blocks or raises an error depending on your preference.
         """
         if not self._computed:
-            # OPTION A: Auto-trigger execution (complex, but user-friendly)
-            # self._executor.execute() 
-            
-            # OPTION B: Strict Offline (safer for static scheduling)
             raise RuntimeError("Task not computed yet. Call executor.execute() first.")
         return self._result
         
@@ -41,8 +37,7 @@ class AppFuture:
         self._result = value
         self._computed = True
 
-
-class SagaExecutor:
+class Executor:
     def __init__(self):
         # The Graph
         self.task_graph = nx.DiGraph()
@@ -98,9 +93,26 @@ class SagaExecutor:
             if isinstance(val, AppFuture):
                 deps.append(val)
         return deps
+    
+
+    def execute(self, scheduler: Scheduler):
+        pass
+
+    def get_network(self) -> Network:
+        pass
+
+class MultiprocessingExecutor(Executor):
+
+
+    def get_network(self) -> Network:
+        network_graph = nx.Graph()
+        # add cores as nodes
+        for i in range(mp.cpu_count()):
+            network_graph.add_node(f"core_{i}", weight=1)
+        return Network(network_graph)
 
     # --- 3. The Execution Phase ---
-    def execute(self):
+    def execute(self, scheduler: Scheduler):
         """
         1. Run Offline Scheduling Algo (HEFT)
         2. Execute tasks in order
@@ -115,6 +127,11 @@ class SagaExecutor:
         # For now, we just get a valid topological order to ensure parents run before children
         execution_order = list(nx.topological_sort(self.task_graph))
         print(f"Calculated Schedule: {execution_order}")
+
+        schedule = scheduler.schedule(self.network, self.task_graph) # This would be your actual SAGA/HEFT scheduling call
+        #interprocess communication, task placement, etc. would be handled here based on the schedule
+        #shared file system, library (zmq) etc.
+        
 
         # B. EXECUTION LOOP
         results_cache = {} # Local storage for results to pass to children
@@ -154,7 +171,6 @@ class SagaExecutor:
             return
 
         # 1. Text Representation (T0 -> T1)
-        # We sort topologically so it prints in roughly the order of execution
         try:
             sorted_nodes = list(nx.topological_sort(self.task_graph))
         except nx.NetworkXUnfeasible:
@@ -175,23 +191,14 @@ class SagaExecutor:
         if visualize:
             try:
                 plt.figure(figsize=(8, 6))
-                
-                # --- START NEW LAYOUT LOGIC ---
-                # 1. Assign "layers" to each node based on their depth in the graph
-                #    Roots are layer 0, their children are layer 1, etc.
                 for layer, nodes in enumerate(nx.topological_generations(self.task_graph)):
                     for node in nodes:
                         self.task_graph.nodes[node]["layer"] = layer
-                
-                # 2. Use multipartite_layout (Positions nodes in vertical columns by default)
-                #    We align them by the 'layer' attribute we just created.
+    
                 pos = nx.multipartite_layout(self.task_graph, subset_key="layer")
                 
-                # 3. Flip the graph! (Multipartite is Left->Right, we want Top->Down)
-                #    We swap (x, y) and negate x to rotate 90 degrees.
                 for node, (x, y) in pos.items():
                     pos[node] = (y, -x) 
-                # --- END NEW LAYOUT LOGIC ---
 
                 nx.draw(
                     self.task_graph, pos, 

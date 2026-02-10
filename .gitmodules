@@ -5,3 +5,4 @@
 [submodule "saga"]
 	path = saga
 	url = https://github.com/ANRGUSC/saga.git
+	branch = main
