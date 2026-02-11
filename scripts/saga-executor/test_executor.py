@@ -1,96 +1,56 @@
-from executor import SagaExecutor
+"""Test script for the SAGA multiprocessing executor."""
+
+import logging
+from executor import MultiprocessingExecutor
+from saga.schedulers import HeftScheduler
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+# -- Executor setup (module level for pickling) -----------------------------
+
+executor = MultiprocessingExecutor(max_workers=4)
 
 
-# create executor
-saga = SagaExecutor()
-
-# dummy tasks
-@saga.python_app()
-def A(): return 1
-
-@saga.python_app()
-def B(): return 2
-
-@saga.python_app()
-def C(a, b): return a + b
-
-# build graph
-f0 = A()
-f1 = B()
-f2 = C(f0, f1)
-f3 = C(f2, f1)
-f4 = C(f3, f1)
-
-# output graph
-saga.print_graph(visualize=True)
+@executor.python_app(cost=0.5)
+def constant(value: int) -> int:
+    return value
 
 
+@executor.python_app(cost=1.0)
+def add(a: int, b: int) -> int:
+    return a + b
 
 
+@executor.python_app(cost=2.0)
+def multiply(a: int, b: int) -> int:
+    return a * b
 
 
-# from saga.executor import PoolExecutor
-# from saga.src.saga.schedulers.heft import HeftScheduler
+# -- Build and run the graph inside __main__ for spawn safety --------------
 
-# # Create a PoolExecutor (maybe print out task graph, make execute function)
-# # Create Python App Decorator 
+if __name__ == "__main__":
+    # Diamond-ish DAG:
+    #   c1(3) ──┐
+    #           add(c1,c2) ──┐
+    #   c2(4) ──┘            │
+    #                        add(sum, prod) -> final
+    #   c3(5) ──┐            │
+    #           mul(c3,c3) ──┘
+    c1 = constant(3)
+    c2 = constant(4)
+    c3 = constant(5)
 
+    sum_result = add(c1, c2)         # 3 + 4 = 7
+    prod_result = multiply(c3, c3)   # 5 * 5 = 25
+    final = add(sum_result, prod_result)  # 7 + 25 = 32
 
-# executor = PoolExecutor(
-#     scheduler=HeftScheduler()
-# )
+    executor.print_graph()
+    executor.execute(HeftScheduler())
 
-# @executor.python_app
-# def task_light(task_id):
-#     """Light task - 0.5 seconds"""
-#     import time
-#     import socket
-#     start = time.time()
-#     time.sleep(0.5)
-#     elapsed = time.time() - start
-#     hostname = socket.gethostname()
-#     print(f"Task {task_id} (light, {elapsed:.2f}s) executed on {hostname}")
-#     return (task_id, hostname, elapsed)
-
-# @executor.python_app
-# def task_heavy(task_id, prev_result):
-#     """Heavy task - 2 seconds"""
-#     import time
-#     import socket
-#     start = time.time()
-#     time.sleep(2.0)
-#     elapsed = time.time() - start
-#     hostname = socket.gethostname()
-#     print(f"Task {task_id} (heavy, {elapsed:.2f}s) executed on {hostname}, after {prev_result[0]}")
-#     return (task_id, hostname, elapsed)
-
-# @executor.python_app
-# def task_medium(task_id, prev_result):
-#     """Medium task - 1 second"""
-#     import time
-#     import socket
-#     start = time.time()
-#     time.sleep(1.0)
-#     elapsed = time.time() - start
-#     hostname = socket.gethostname()
-#     print(f"Task {task_id} (medium, {elapsed:.2f}s) executed on {hostname}, after {prev_result[0]}")
-#     return (task_id, hostname, elapsed)
-
-# @executor.python_app
-# def final_task(task_id, input1, input2):
-#     """Final aggregation task"""
-#     import time
-#     import socket
-#     start = time.time()
-#     time.sleep(0.5)
-#     elapsed = time.time() - start
-#     hostname = socket.gethostname()
-#     print(f"Task {task_id} (final, {elapsed:.2f}s) executed on {hostname}, aggregating inputs from {input1[0]} and {input2[0]}")
-#     return (task_id, hostname, elapsed)
-
-
-# def main():
-#     executor.print_graph()
-
-# if __name__ == "__main__":
-#     main()
+    print("\nResults:")
+    print(f"  constant(3)    = {c1.result()}")
+    print(f"  constant(4)    = {c2.result()}")
+    print(f"  constant(5)    = {c3.result()}")
+    print(f"  add(3, 4)      = {sum_result.result()}")
+    print(f"  multiply(5, 5) = {prod_result.result()}")
+    print(f"  add(7, 25)     = {final.result()}")
